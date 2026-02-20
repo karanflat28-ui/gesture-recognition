@@ -2,31 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nebula Core - Final Master</title>
+    <title>Nebula: V-Sign Message</title>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
-        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; background: #00ffff; border: none; cursor: pointer; z-index: 100; font-weight: bold; border-radius: 50px; font-size: 1.2rem; }
-        #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: #00ffff; pointer-events: none; }
-        .canvas-container { position: absolute; bottom: 10px; left: 10px; width: 160px; height: 120px; border: 2px solid #00ffff; border-radius: 10px; overflow: hidden; }
-        video.input_video, canvas.output_canvas { position: absolute; width: 100%; height: 100%; transform: scaleX(-1); }
+        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
+        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; background: #fff; border: none; cursor: pointer; z-index: 100; font-weight: bold; border-radius: 5px; }
+        #status { position: absolute; top: 20px; width: 100%; text-align: center; color: #fff; pointer-events: none; font-size: 2rem; letter-spacing: 5px; }
+        video { position: absolute; bottom: 10px; left: 10px; width: 120px; opacity: 0.3; transform: scaleX(-1); }
     </style>
 </head>
 <body>
-    <button id="start-btn">ENGAGE CORE</button>
-    <div id="ui"><h1 id="status">OFFLINE</h1><p id="debug">System Ready</p></div>
-    
-    <div class="canvas-container">
-        <video class="input_video" playsinline></video>
-        <canvas class="output_canvas"></canvas>
-    </div>
+    <button id="start-btn">START SYSTEM</button>
+    <div id="status">AWAITING V-SIGN</div>
+    <video class="input_video"></video>
 
     <script>
         let isStarted = false;
-        const starCount = 4000;
+        const starCount = 3000;
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -36,121 +30,91 @@
         const geometry = new THREE.BufferGeometry();
         const pos = new Float32Array(starCount * 3);
         const targets = new Float32Array(starCount * 3);
-        const colors = new Float32Array(starCount * 3);
 
-        const colorIdle = new THREE.Color(0x00ffff);
-        const colorText = new THREE.Color(0xffd700);
-        const colorPuppy = new THREE.Color(0xffb6c1);
-
+        // Initial Random Cloud
         for (let i = 0; i < starCount; i++) {
-            pos[i*3] = (Math.random()-0.5)*50;
-            pos[i*3+1] = (Math.random()-0.5)*50;
-            pos[i*3+2] = (Math.random()-0.5)*50;
+            pos[i*3] = (Math.random()-0.5)*40;
+            pos[i*3+1] = (Math.random()-0.5)*40;
+            pos[i*3+2] = (Math.random()-0.5)*40;
+            targets[i*3] = pos[i*3];
+            targets[i*3+1] = pos[i*3+1];
+            targets[i*3+2] = pos[i*3+2];
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        const points = new THREE.Points(geometry, new THREE.PointsMaterial({ size: 0.15, vertexColors: true }));
+        const material = new THREE.PointsMaterial({ size: 0.1, color: 0x00ffff });
+        const points = new THREE.Points(geometry, material);
         scene.add(points);
         camera.position.z = 25;
 
-        // --- COORDINATE SYSTEMS ---
-        function setGalaxy() {
+        // --- THE ONLY TWO SHAPES ---
+        function setCloud() {
             for (let i = 0; i < starCount; i++) {
-                const a = (i/starCount) * Math.PI * 25;
-                const r = (i/starCount) * 18;
-                targets[i*3] = Math.cos(a)*r; targets[i*3+1] = Math.sin(a)*r; targets[i*3+2] = (Math.random()-0.5)*5;
+                // Return to random spots
+                const seed = i * 1.5;
+                targets[i*3] = Math.sin(seed) * 15 + (Math.random()-0.5)*5;
+                targets[i*3+1] = Math.cos(seed) * 15 + (Math.random()-0.5)*5;
+                targets[i*3+2] = (Math.random()-0.5)*10;
             }
         }
-        function setFist() {
+
+        function setTextMessage() {
             for (let i = 0; i < starCount; i++) {
-                targets[i*3] = (Math.random()-0.5)*0.5; targets[i*3+1] = (Math.random()-0.5)*0.5; targets[i*3+2] = (Math.random()-0.5)*0.5;
-            }
-        }
-        function setPuppy() {
-            for (let i = 0; i < starCount; i++) {
-                const t = i / starCount;
-                if (t < 0.6) { // Round Head
-                    const a = Math.random() * Math.PI * 2;
-                    targets[i*3] = Math.cos(a)*4.5; targets[i*3+1] = Math.sin(a)*4 + 2;
-                } else { // Long Droopy Ears
-                    targets[i*3] = (i % 2 === 0 ? 5 : -5) + (Math.random()-0.5);
-                    targets[i*3+1] = (Math.random()*-7) + 2;
-                }
-                targets[i*3+2] = 0;
-            }
-        }
-        function setText() {
-            for (let i = 0; i < starCount; i++) {
-                const line = Math.floor(i / (starCount / 5));
-                targets[i*3] = ((i % 800) / 40 - 10) * 1.5; // Horizontal line
-                targets[i*3+1] = (2 - line) * 3; // Vertical gaps
+                // Arrange into 4 straight lines to look like text blocks
+                const line = i % 4;
+                targets[i*3] = ((i % 750) / 30 - 12) * 1.2; // Width
+                targets[i*3+1] = (1.5 - line) * 4; // Vertical spacing
                 targets[i*3+2] = 0;
             }
         }
 
-        // --- HANDS ENGINE ---
-        const videoElement = document.querySelector('.input_video');
-        const canvasElement = document.querySelector('.output_canvas');
-        const canvasCtx = canvasElement.getContext('2d');
-
+        // --- HANDS LOGIC ---
         function onResults(results) {
-            canvasCtx.save();
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-            
             const status = document.getElementById('status');
-            const debug = document.getElementById('debug');
-
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                debug.innerText = "HAND DETECTED";
                 const lm = results.multiHandLandmarks[0];
-                drawConnectors(canvasCtx, lm, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
                 
-                const index = lm[8].y < lm[6].y;
-                const middle = lm[12].y < lm[10].y;
-                const ring = lm[16].y < lm[14].y;
-                const pinky = lm[20].y < lm[18].y;
+                // Detection: Index and Middle fingers UP, others DOWN
+                const indexUp = lm[8].y < lm[6].y;
+                const middleUp = lm[12].y < lm[10].y;
+                const ringDown = lm[16].y > lm[14].y;
+                const pinkyDown = lm[20].y > lm[18].y;
 
-                // Recognition Logic
-                if (index && middle && !ring && !pinky) { status.innerText = "HAVE A GREAT DAY"; setText(); }
-                else if (index && pinky && !middle) { status.innerText = "PUPPY MODE"; setPuppy(); }
-                else if (!index && !middle && !ring && !pinky) { status.innerText = "SINGULARITY"; setFist(); }
-                else { status.innerText = "GALAXY IDLE"; setGalaxy(); }
+                if (indexUp && middleUp && ringDown && pinkyDown) {
+                    status.innerText = "HAVE A GREAT DAY";
+                    setTextMessage();
+                } else {
+                    status.innerText = "AWAITING V-SIGN";
+                    setCloud();
+                }
             } else {
-                debug.innerText = "Searching...";
-                status.innerText = "GALAXY IDLE"; setGalaxy();
+                status.innerText = "NO HAND DETECTED";
+                setCloud();
             }
-            canvasCtx.restore();
         }
 
         function animate() {
             requestAnimationFrame(animate);
             const p = geometry.attributes.position.array;
-            const c = geometry.attributes.color.array;
-            const s = document.getElementById('status').innerText;
-            for (let i = 0; i < starCount; i++) {
-                let ix=i*3, iy=i*3+1, iz=i*3+2;
-                p[ix] += (targets[ix]-p[ix])*0.12; p[iy] += (targets[iy]-p[iy])*0.12; p[iz] += (targets[iz]-p[iz])*0.12;
-                let col = colorIdle;
-                if(s.includes("DAY")) col = colorText;
-                if(s.includes("PUPPY")) col = colorPuppy;
-                c[ix]+=(col.r-c[ix])*0.1; c[iy]+=(col.g-c[iy])*0.1; c[iz]+=(col.b-c[iz])*0.1;
+            for (let i = 0; i < starCount * 3; i++) {
+                p[i] += (targets[i] - p[i]) * 0.1; // Smooth move
             }
             geometry.attributes.position.needsUpdate = true;
-            geometry.attributes.color.needsUpdate = true;
-            points.rotation.z += 0.001;
+            points.rotation.y += 0.001;
             renderer.render(scene, camera);
         }
 
         document.getElementById('start-btn').addEventListener('click', () => {
             isStarted = true;
             document.getElementById('start-btn').style.display = 'none';
-            setGalaxy(); animate();
+            animate();
             const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-            hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+            hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.5 });
             hands.onResults(onResults);
-            new Camera(videoElement, { onFrame: async () => { await hands.send({image: videoElement}); }, width: 640, height: 480 }).start();
+            new Camera(document.querySelector('.input_video'), {
+                onFrame: async () => { await hands.send({image: document.querySelector('.input_video')}); },
+                width: 640, height: 480
+            }).start();
         });
     </script>
 </body>
