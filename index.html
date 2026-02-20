@@ -1,241 +1,145 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Nebula V Sign</title>
-
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
-<style>
-body { margin:0; background:black; overflow:hidden; }
-#info {
-  position:absolute;
-  top:20px;
-  width:100%;
-  text-align:center;
-  color:#00ffff;
-  font-size:28px;
-  font-family:Arial;
-}
-video {
-  position:absolute;
-  bottom:10px;
-  left:10px;
-  width:150px;
-  transform:scaleX(-1);
-  opacity:0.4;
-  border:1px solid #00ffff;
-}
-</style>
+    <title>Nebula: Perfect Text V-Sign</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; color: white; font-family: sans-serif; }
+        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; z-index: 100; cursor: pointer; background: #00ffff; border: none; border-radius: 50px; font-weight: bold; color: black; box-shadow: 0 0 20px #00ffff; }
+        #info { position: absolute; width: 100%; text-align: center; top: 20px; font-size: 24px; color: #00ffff; z-index: 10; }
+        video { position: absolute; bottom: 10px; left: 10px; width: 160px; transform: scaleX(-1); border: 1px solid #00ffff; opacity: 0.3; pointer-events: none; }
+    </style>
 </head>
-
 <body>
+    <button id="start-btn">ENGAGE NEBULA</button>
+    <div id="info">SYSTEM OFFLINE</div>
+    <video id="webcam" autoplay playsinline></video>
 
-<div id="info">Show V Sign ✌</div>
-<video id="webcam" autoplay playsinline></video>
+    <script>
+        const video = document.getElementById('webcam');
+        const info = document.getElementById('info');
+        
+        // --- 1. TEXT GENERATOR ---
+        const textCanvas = document.createElement('canvas');
+        const tCtx = textCanvas.getContext('2d');
+        textCanvas.width = 400;
+        textCanvas.height = 100;
 
-<script>
+        function generateTextMap() {
+            tCtx.fillStyle = 'black';
+            tCtx.fillRect(0, 0, 400, 100);
+            tCtx.fillStyle = 'white';
+            tCtx.font = 'bold 38px Arial';
+            tCtx.textAlign = 'center';
+            tCtx.fillText("HAVE A GREAT DAY", 200, 60);
+            
+            const pts = [];
+            const data = tCtx.getImageData(0, 0, 400, 100).data;
+            for (let y = 0; y < 100; y += 2) {
+                for (let x = 0; x < 400; x += 2) {
+                    if (data[(y * 400 + x) * 4] > 128) {
+                        pts.push({x: (x - 200) * 0.15, y: (50 - y) * 0.15});
+                    }
+                }
+            }
+            return pts;
+        }
+        const textPoints = generateTextMap();
 
-// ====================
-// THREE.JS SETUP
-// ====================
+        // --- 2. THREE.JS SETUP ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(
-  75, window.innerWidth/window.innerHeight, 0.1, 1000
-);
-camera.position.z = 40;
+        const starCount = 4000;
+        const geo = new THREE.BufferGeometry();
+        const posArr = new Float32Array(starCount * 3);
+        const targetArr = new Float32Array(starCount * 3);
 
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+        for(let i=0; i<starCount*3; i++) {
+            posArr[i] = (Math.random()-0.5)*50;
+            targetArr[i] = posArr[i];
+        }
+        geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+        const stars = new THREE.Points(geo, new THREE.PointsMaterial({color: 0x00ffff, size: 0.12}));
+        scene.add(stars);
+        camera.position.z = 25;
 
-const starCount = 4000;
-const geometry = new THREE.BufferGeometry();
-const positions = new Float32Array(starCount*3);
-const targets = new Float32Array(starCount*3);
-
-for(let i=0;i<starCount*3;i++){
-  positions[i]=(Math.random()-0.5)*80;
-  targets[i]=positions[i];
-}
-
-geometry.setAttribute(
-  "position",
-  new THREE.BufferAttribute(positions,3)
-);
-
-const stars = new THREE.Points(
-  geometry,
-  new THREE.PointsMaterial({color:0x00ffff,size:0.25})
-);
-
-scene.add(stars);
-
-
-// ====================
-// TEXT SHAPE
-// ====================
-
-function createTextPoints(){
-
-  const canvas=document.createElement("canvas");
-  canvas.width=600;
-  canvas.height=200;
-  const ctx=canvas.getContext("2d");
-
-  ctx.fillStyle="black";
-  ctx.fillRect(0,0,600,200);
-
-  ctx.fillStyle="white";
-  ctx.font="bold 80px Arial";
-  ctx.textAlign="center";
-  ctx.fillText("HAVE A GREAT DAY",300,120);
-
-  const data=ctx.getImageData(0,0,600,200).data;
-  const points=[];
-
-  for(let y=0;y<200;y+=2){
-    for(let x=0;x<600;x+=2){
-      if(data[(y*600+x)*4]>150){
-        points.push({
-          x:(x-300)*0.07,
-          y:(100-y)*0.07
+        // --- 3. HAND TRACKING ---
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
+        
+        hands.onResults((results) => {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const lm = results.multiHandLandmarks[0];
+                const isV = lm[8].y < lm[6].y && lm[12].y < lm[10].y;
+                
+                if (isV) {
+                    info.innerText = "HAVE A GREAT DAY";
+                    for (let i = 0; i < starCount; i++) {
+                        const p = textPoints[i % textPoints.length];
+                        targetArr[i*3] = p.x * 2.5;
+                        targetArr[i*3+1] = p.y * 2.5;
+                        targetArr[i*3+2] = 0;
+                    }
+                } else {
+                    info.innerText = "SIGHTED: SHOW V-SIGN (✌️)";
+                    returnToCloud();
+                }
+            } else {
+                info.innerText = "SEARCHING FOR HAND...";
+                returnToCloud();
+            }
         });
-      }
-    }
-  }
 
-  return points;
-}
+        function returnToCloud() {
+            for (let i = 0; i < starCount; i++) {
+                const a = i * 0.2 + (Date.now() * 0.0005);
+                targetArr[i*3] = Math.cos(a) * 15;
+                targetArr[i*3+1] = Math.sin(a) * 15;
+                targetArr[i*3+2] = Math.sin(i) * 5;
+            }
+        }
 
-const textPoints=createTextPoints();
+        function animate() {
+            requestAnimationFrame(animate);
+            const positions = geo.attributes.position.array;
+            for(let i=0; i<starCount*3; i++) {
+                positions[i] += (targetArr[i] - positions[i]) * 0.1;
+            }
+            geo.attributes.position.needsUpdate = true;
+            stars.rotation.y += 0.001;
+            renderer.render(scene, camera);
+        }
 
+        // --- 4. STARTUP WITH ERROR HANDLING ---
+        document.getElementById('start-btn').addEventListener('click', async () => {
+            document.getElementById('start-btn').style.display = 'none';
+            info.innerText = "STARTING CAMERA...";
 
-// ====================
-// CLOUD MODE
-// ====================
-
-function cloud(){
-  for(let i=0;i<starCount;i++){
-    const angle=i*0.2+Date.now()*0.001;
-    targets[i*3]=Math.cos(angle)*15;
-    targets[i*3+1]=Math.sin(angle)*15;
-    targets[i*3+2]=Math.sin(i)*5;
-  }
-}
-
-
-// ====================
-// TEXT MODE
-// ====================
-
-function formText(){
-  for(let i=0;i<starCount;i++){
-    const index=Math.floor(i/starCount*textPoints.length);
-    const p=textPoints[index];
-    targets[i*3]=p.x*2;
-    targets[i*3+1]=p.y*2;
-    targets[i*3+2]=0;
-  }
-}
-
-
-// ====================
-// ANIMATION LOOP
-// ====================
-
-function animate(){
-  requestAnimationFrame(animate);
-
-  const pos=geometry.attributes.position.array;
-
-  for(let i=0;i<starCount*3;i++){
-    pos[i]+=(targets[i]-pos[i])*0.08;
-  }
-
-  geometry.attributes.position.needsUpdate=true;
-  stars.rotation.y+=0.001;
-
-  renderer.render(scene,camera);
-}
-
-animate();
-cloud();
-
-
-// ====================
-// MEDIAPIPE HANDS
-// ====================
-
-const video=document.getElementById("webcam");
-const info=document.getElementById("info");
-
-const hands=new Hands({
-  locateFile:(file)=>
-  `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-});
-
-hands.setOptions({
-  maxNumHands:1,
-  minDetectionConfidence:0.7,
-  minTrackingConfidence:0.7
-});
-
-hands.onResults(results=>{
-
-  if(results.multiHandLandmarks &&
-     results.multiHandLandmarks.length>0){
-
-    const lm=results.multiHandLandmarks[0];
-
-    const isV=
-      lm[8].y < lm[6].y &&      // index up
-      lm[12].y < lm[10].y &&    // middle up
-      lm[16].y > lm[14].y &&    // ring down
-      lm[20].y > lm[18].y;      // pinky down
-
-    if(isV){
-      info.innerText="HAVE A GREAT DAY";
-      formText();
-    }else{
-      info.innerText="Show V Sign ✌";
-      cloud();
-    }
-
-  }else{
-    info.innerText="Searching for hand...";
-    cloud();
-  }
-});
-
-
-// ====================
-// CAMERA START
-// ====================
-
-const cameraFeed=new Camera(video,{
-  onFrame: async ()=>{
-    await hands.send({image:video});
-  },
-  width:640,
-  height:480
-});
-
-cameraFeed.start();
-
-
-// ====================
-// RESIZE
-// ====================
-
-window.addEventListener("resize",()=>{
-  camera.aspect=window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth,window.innerHeight);
-});
-
-</script>
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" } 
+                });
+                video.srcObject = stream;
+                animate();
+                
+                async function detectionLoop() {
+                    if (video.readyState >= 2) {
+                        await hands.send({image: video});
+                    }
+                    requestAnimationFrame(detectionLoop);
+                }
+                detectionLoop();
+            } catch (err) {
+                console.error(err);
+                info.innerText = "CAMERA ERROR: " + err.name;
+                alert("Please ensure your camera is plugged in and permissions are granted!");
+            }
+        });
+    </script>
 </body>
 </html>
