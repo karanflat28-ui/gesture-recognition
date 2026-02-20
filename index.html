@@ -2,140 +2,245 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nebula Core: Warp & Flare</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nebula Core: Warp & Flare Edition</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
-        video { position: absolute; bottom: 15px; right: 15px; width: 130px; border: 1px solid #ff4500; border-radius: 5px; transform: scaleX(-1); opacity: 0.4; }
-        #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: #ff4500; pointer-events: none; text-transform: uppercase; letter-spacing: 2px; }
-        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; background: #ff4500; border: none; cursor: pointer; color: white; font-weight: bold; z-index: 100; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
+        canvas { display: block; }
+        
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #mode-display { font-size: 2.5rem; margin: 0; letter-spacing: 5px; }
+        #sub-status { font-size: 1rem; color: #ff4500; text-shadow: 0 0 5px #ff4500; }
+
+        video.input_video {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 180px;
+            border: 2px solid #00ffff;
+            border-radius: 12px;
+            transform: scaleX(-1);
+            opacity: 0.6;
+            z-index: 5;
+        }
+
+        #start-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px;
+            background: #00ffff;
+            color: #000;
+            border: none;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: bold;
+            font-size: 1.2rem;
+            cursor: pointer;
+            border-radius: 50px;
+            box-shadow: 0 0 30px #00ffff;
+            transition: 0.3s;
+            z-index: 100;
+        }
+
+        #start-btn:hover { background: #fff; box-shadow: 0 0 50px #fff; }
     </style>
 </head>
 <body>
-    <button id="start-btn">INITIALIZE CORE</button>
-    <div id="ui"><h1 id="mode-display">NEBULA IDLE</h1><p id="sub-status">Awaiting Input...</p></div>
-    <video class="input_video"></video>
+
+    <button id="start-btn">ENGAGE NEBULA CORE</button>
+
+    <div id="ui-layer">
+        <h1 id="mode-display">CORE OFFLINE</h1>
+        <p id="sub-status">SYSTEM READY - INITIALIZE TO START</p>
+    </div>
+
+    <video class="input_video" playsinline></video>
 
     <script>
-        // --- AUDIO ---
+        // --- AUDIO ENGINE ---
         let audioCtx, osc, gain;
         function initAudio() {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             osc = audioCtx.createOscillator();
             gain = audioCtx.createGain();
-            osc.type = 'sawtooth';
-            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.type = 'sine';
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
             gain.gain.setValueAtTime(0, audioCtx.currentTime);
             osc.start();
-            document.getElementById('start-btn').style.display = 'none';
         }
-        document.getElementById('start-btn').addEventListener('click', initAudio);
 
-        // --- THREE.JS ---
+        // --- THREE.JS ENGINE ---
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-        // We use preserveDrawingBuffer: true to create trails manually
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-        renderer.autoClearColor = false; // Essential for Warp Trails
+        renderer.autoClearColor = false; 
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const starCount = 5000;
+        const starCount = 6000;
         const geometry = new THREE.BufferGeometry();
         const pos = new Float32Array(starCount * 3);
         const col = new Float32Array(starCount * 3);
         
         for (let i = 0; i < starCount; i++) {
-            pos[i*3] = (Math.random()-0.5)*40;
-            pos[i*3+1] = (Math.random()-0.5)*40;
-            pos[i*3+2] = (Math.random()-0.5)*40;
+            pos[i*3] = (Math.random() - 0.5) * 50;
+            pos[i*3+1] = (Math.random() - 0.5) * 50;
+            pos[i*3+2] = (Math.random() - 0.5) * 50;
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
-        const mat = new THREE.PointsMaterial({ size: 0.08, vertexColors: true, transparent: true, opacity: 0.8 });
-        const points = new THREE.Points(geometry, mat);
+        const material = new THREE.PointsMaterial({ size: 0.07, vertexColors: true, transparent: true, opacity: 0.8 });
+        const points = new THREE.Points(geometry, material);
         scene.add(points);
-        camera.position.z = 20;
+        camera.position.z = 25;
 
-        // --- GESTURE LOGIC ---
-        let currentMode = "idle"; // "idle", "warp", "flare"
-        const cyan = new THREE.Color(0x00ffff), orange = new THREE.Color(0xff4500), red = new THREE.Color(0xff0000);
+        // --- COLORS ---
+        const colorCyan = new THREE.Color(0x00ffff);
+        const colorOrange = new THREE.Color(0xff4500);
+        const colorWhite = new THREE.Color(0xffffff);
+
+        // --- GESTURE STATE ---
+        let currentMode = "idle"; 
+        let isStarted = false;
 
         function onResults(results) {
+            if (!isStarted) return;
+            
+            const modeDisplay = document.getElementById('mode-display');
+            const subStatus = document.getElementById('sub-status');
+
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const lm = results.multiHandLandmarks[0];
-                const indexUp = lm[8].y < lm[6].y, middleUp = lm[12].y < lm[10].y, 
-                      ringUp = lm[16].y < lm[14].y, pinkyUp = lm[20].y < lm[18].y;
-
-                if (indexUp && !middleUp && !ringUp && !pinkyUp) currentMode = "warp";
-                else if (indexUp && !middleUp && !ringUp && pinkyUp) currentMode = "flare";
-                else currentMode = "idle";
                 
-                document.getElementById('mode-display').innerText = currentMode === "idle" ? "NEBULA IDLE" : currentMode + " DRIVE";
+                // Finger Detection Logic
+                const indexUp = lm[8].y < lm[6].y;
+                const middleUp = lm[12].y < lm[10].y;
+                const ringUp = lm[16].y < lm[14].y;
+                const pinkyUp = lm[20].y < lm[18].y;
+
+                if (indexUp && !middleUp && !ringUp && !pinkyUp) {
+                    currentMode = "warp";
+                    modeDisplay.innerText = "WARP DRIVE";
+                    subStatus.innerText = "ACCELERATING TO HYPERSPACE";
+                    modeDisplay.style.color = "#ffffff";
+                } else if (indexUp && !middleUp && !ringUp && pinkyUp) {
+                    currentMode = "flare";
+                    modeDisplay.innerText = "SOLAR FLARE";
+                    subStatus.innerText = "CRITICAL CORE TEMPERATURE";
+                    modeDisplay.style.color = "#ff4500";
+                } else {
+                    currentMode = "idle";
+                    modeDisplay.innerText = "NEBULA IDLE";
+                    subStatus.innerText = "STABLE ORBIT";
+                    modeDisplay.style.color = "#00ffff";
+                }
+            } else {
+                currentMode = "idle";
             }
         }
 
-        // --- LOOP ---
+        // --- ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
+            if (!isStarted) return;
+
             const p = geometry.attributes.position.array;
             const c = geometry.attributes.color.array;
 
-            // Fade effect for trails
-            const fadeOverlay = new THREE.Mesh(
-                new THREE.PlaneGeometry(100, 100),
-                new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: currentMode === "warp" ? 0.15 : 0.4 })
-            );
-            fadeOverlay.position.z = camera.position.z - 1;
-            scene.add(fadeOverlay);
+            // Trail Effect (Black Plane with varying opacity)
+            const opacity = currentMode === "warp" ? 0.2 : 0.5;
+            const fadeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: opacity });
+            const fadeMesh = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), fadeMaterial);
+            fadeMesh.position.z = camera.position.z - 1;
+            scene.add(fadeMesh);
 
+            // Audio Modulation
             if (audioCtx) {
-                let f = 110, v = 0.02;
-                if (currentMode === "warp") { f = 660; v = 0.15; osc.type = 'sine'; }
-                else if (currentMode === "flare") { f = 55; v = 0.25; osc.type = 'sawtooth'; }
-                osc.frequency.setTargetAtTime(f, audioCtx.currentTime, 0.1);
-                gain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.1);
+                let freq = 110, vol = 0.02;
+                if (currentMode === "warp") { freq = 500; vol = 0.1; osc.type = 'sine'; }
+                else if (currentMode === "flare") { freq = 60; vol = 0.2; osc.type = 'sawtooth'; }
+                else { osc.type = 'sine'; }
+                osc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.1);
+                gain.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.1);
             }
 
             for (let i = 0; i < starCount; i++) {
-                let ix = i*3, iy = i*3+1, iz = i*3+2;
+                let ix = i * 3, iy = i * 3 + 1, iz = i * 3 + 2;
 
                 if (currentMode === "warp") {
-                    p[iz] += 1.5; // Fly toward camera
-                    if (p[iz] > 20) p[iz] = -40; // Loop back
-                    c[ix] = 1; c[iy] = 1; c[iz] = 1; // Warp White
+                    p[iz] += 1.2; // Move toward camera fast
+                    if (p[iz] > 25) p[iz] = -25; // Loop
+                    c[ix] = 1; c[iy] = 1; c[iz] = 1; // Pure White
                 } else if (currentMode === "flare") {
-                    // Jitter / Heat effect
-                    p[ix] += (Math.random()-0.5)*0.2;
-                    p[iy] += (Math.random()-0.5)*0.2;
-                    c[ix] = orange.r; c[iy] = orange.g; c[iz] = orange.b;
-                    if (Math.random() > 0.9) { c[ix] = red.r; c[iy] = red.g; c[iz] = red.b; }
+                    p[ix] += (Math.random() - 0.5) * 0.3; // Jitter
+                    p[iy] += (Math.random() - 0.5) * 0.3;
+                    c[ix] = colorOrange.r; c[iy] = colorOrange.g; c[iz] = colorOrange.b;
                 } else {
-                    // Idle Drift
-                    p[iz] += 0.05;
-                    if (p[iz] > 20) p[iz] = -40;
-                    c[ix] += (cyan.r - c[ix]) * 0.1;
-                    c[iy] += (cyan.g - c[iy]) * 0.1;
-                    c[iz] += (cyan.b - c[iz]) * 0.1;
+                    // Drift
+                    p[iz] += 0.03;
+                    if (p[iz] > 25) p[iz] = -25;
+                    c[ix] += (colorCyan.r - c[ix]) * 0.1;
+                    c[iy] += (colorCyan.g - c[iy]) * 0.1;
+                    c[iz] += (colorCyan.b - c[iz]) * 0.1;
                 }
             }
             geometry.attributes.position.needsUpdate = true;
             geometry.attributes.color.needsUpdate = true;
             renderer.render(scene, camera);
-            scene.remove(fadeOverlay); // Clean up overlay
+            scene.remove(fadeMesh);
         }
-        animate();
 
-        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.8 });
-        hands.onResults(onResults);
-        new Camera(document.querySelector('.input_video'), {
-            onFrame: async () => { await hands.send({image: document.querySelector('.input_video')}); },
-            width: 640, height: 480
-        }).start();
+        // --- STARTUP ---
+        const startBtn = document.getElementById('start-btn');
+        startBtn.addEventListener('click', () => {
+            isStarted = true;
+            initAudio();
+            startBtn.style.display = 'none';
+            animate();
+            
+            const videoElement = document.querySelector('.input_video');
+            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+            
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.6
+            });
+            
+            hands.onResults(onResults);
+
+            const cameraHelper = new Camera(videoElement, {
+                onFrame: async () => { await hands.send({image: videoElement}); },
+                width: 640, height: 480
+            });
+            cameraHelper.start();
+        });
+
+        // Resize Handling
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
