@@ -32,9 +32,9 @@
             tCtx.fillStyle = 'white';
             tCtx.font = 'bold 28px Arial';
             tCtx.textAlign = 'center';
-            tCtx.fillText("HAVE A", 150, 50);
-            tCtx.fillText("GREAT", 150, 85);
-            tCtx.fillText("DAY", 150, 120);
+            tCtx.fillText("HAD", 150, 50);
+            tCtx.fillText("LUNCH", 150, 85);
+            tCtx.fillText("?", 150, 120);
             
             const pts = [];
             const data = tCtx.getImageData(0, 0, 300, 150).data;
@@ -82,7 +82,7 @@
                 const isV = lm[8].y < lm[6].y && lm[12].y < lm[10].y && lm[16].y > lm[14].y;
                 
                 if (isV) {
-                    info.innerText = "HAVE A GREAT DAY";
+                    info.innerText = "HAD LUNCH ?";
                     info.style.color = "#FFD700"; // Gold color
                     for (let i = 0; i < starCount; i++) {
                         const p = textPoints[i % textPoints.length];
