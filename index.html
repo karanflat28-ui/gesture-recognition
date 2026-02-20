@@ -26,20 +26,27 @@
         textCanvas.width = 400;
         textCanvas.height = 100;
 
+        // --- MOBILE-OPTIMIZED TEXT GENERATOR ---
         function generateTextMap() {
             tCtx.fillStyle = 'black';
             tCtx.fillRect(0, 0, 400, 100);
             tCtx.fillStyle = 'white';
-            tCtx.font = 'bold 38px Arial';
+            
+            // Adjust font size for mobile stacking
+            tCtx.font = 'bold 30px Arial'; 
             tCtx.textAlign = 'center';
-            tCtx.fillText("HAVE A GREAT DAY", 200, 60);
+            
+            // Stack words vertically for narrow screens
+            tCtx.fillText("HAVE A", 200, 30);
+            tCtx.fillText("GREAT DAY", 200, 70);
             
             const pts = [];
             const data = tCtx.getImageData(0, 0, 400, 100).data;
             for (let y = 0; y < 100; y += 2) {
                 for (let x = 0; x < 400; x += 2) {
                     if (data[(y * 400 + x) * 4] > 128) {
-                        pts.push({x: (x - 200) * 0.15, y: (50 - y) * 0.15});
+                        // Shrink the scale (0.1 instead of 0.15) to fit mobile
+                        pts.push({x: (x - 200) * 0.1, y: (50 - y) * 0.1});
                     }
                 }
             }
@@ -79,12 +86,13 @@
                 
                 if (isV) {
                     info.innerText = "HAVE A GREAT DAY";
-                    for (let i = 0; i < starCount; i++) {
-                        const p = textPoints[i % textPoints.length];
-                        targetArr[i*3] = p.x * 2.5;
-                        targetArr[i*3+1] = p.y * 2.5;
-                        targetArr[i*3+2] = 0;
-                    }
+            for (let i = 0; i < starCount; i++) {
+                const p = textPoints[i % textPoints.length];
+                // Increase multiplier slightly for visibility, but keep it centered
+                targetArr[i*3] = p.x * 2.8; 
+                targetArr[i*3+1] = p.y * 2.8;
+                targetArr[i*3+2] = 0;
+            }
                 } else {
                     info.innerText = "SIGHTED: SHOW V-SIGN (✌️)";
                     returnToCloud();
