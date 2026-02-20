@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V-Sign Gesture App</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f0f2f5;
+      transition: background-color 0.4s ease; /* Smooth color change */
+    }
+
+    h1 { margin-bottom: 10px; color: #333; }
+    
+    #status-container {
+      background: rgba(255, 255, 255, 0.8);
+      padding: 20px;
+      border-radius: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+
+    #output {
+      display: block;
+      font-size: 80px;
+      margin: 10px 0;
+    }
+
+    .video-container {
+      position: relative;
+      margin-top: 20px;
+      border: 5px solid #fff;
+      border-radius: 15px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      width: 480px;
+      height: 360px;
+    }
+
+    video {
+      transform: scaleX(-1); /* Mirror the video for natural feel */
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="status-container">
+    <h1>Make a "V" Sign! ✌️</h1>
+    <span id="output">⌛ Loading AI...</span>
+  </div>
+
+  <div class="video-container">
+    <video class="input_video"></video>
+  </div>
+
+  <script>
+    const videoElement = document.getElementsByClassName('input_video')[0];
+    const outputElement = document.getElementById('output');
+    let isVActive = false;
+
+    function onResults(results) {
+      // Check if any hands are detected
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+        
+        // GESTURE LOGIC:
+        // Landmarks: 8 = Index Tip, 6 = Index Knuckle, 12 = Middle Tip, 10 = Middle Knuckle
+        // 16 = Ring Tip, 14 = Ring Knuckle
+        const isIndexUp = landmarks[8].y < landmarks[6].y;
+        const isMiddleUp = landmarks[12].y < landmarks[10].y;
+        const isRingDown = landmarks[16].y > landmarks[14].y;
+        const isPinkyDown = landmarks[20].y > landmarks[18].y;
+
+        // Condition for "V" (Index and Middle up, others down)
+        if (isIndexUp && isMiddleUp && isRingDown && isPinkyDown) {
+          if (!isVActive) {
+            outputElement.innerText = "✌️ V-SIGN!";
+            document.body.style.backgroundColor = "#2ecc71"; // Success Green
+            
+            // Trigger Confetti!
+            confetti({
+              particleCount: 100,
+              spread: 70,
+              origin: { y: 0.6 }
+            });
+            
+            isVActive = true;
+          }
+        } else {
+          outputElement.innerText = "Searching...";
+          document.body.style.backgroundColor = "#f0f2f5"; // Reset color
+          isVActive = false;
+        }
+      } else {
+        outputElement.innerText = "No hand detected";
+        document.body.style.backgroundColor = "#f0f2f5";
+        isVActive = false;
+      }
+    }
+
+    // Initialize Mediapipe Hands
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(onResults);
+
+    // Initialize Camera
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({image: videoElement});
+      },
+      width: 480,
+      height: 360
+    });
+
+    camera.start();
+  </script>
+</body>
+</html>
