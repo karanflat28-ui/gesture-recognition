@@ -1,120 +1,121 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Nebula: V-Sign Message</title>
+    <title>V-Sign Star Control</title>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
-        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; background: #fff; border: none; cursor: pointer; z-index: 100; font-weight: bold; border-radius: 5px; }
-        #status { position: absolute; top: 20px; width: 100%; text-align: center; color: #fff; pointer-events: none; font-size: 2rem; letter-spacing: 5px; }
-        video { position: absolute; bottom: 10px; left: 10px; width: 120px; opacity: 0.3; transform: scaleX(-1); }
+        body { margin: 0; background: #000; overflow: hidden; color: white; font-family: sans-serif; }
+        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px; z-index: 10; cursor: pointer; }
+        #info { position: absolute; width: 100%; text-align: center; top: 10px; font-size: 20px; }
+        video { position: absolute; bottom: 10px; left: 10px; width: 160px; transform: scaleX(-1); border: 1px solid white; }
+        canvas#overlay { position: absolute; bottom: 10px; left: 10px; width: 160px; height: 120px; transform: scaleX(-1); z-index: 5; pointer-events: none; }
     </style>
 </head>
 <body>
-    <button id="start-btn">START SYSTEM</button>
-    <div id="status">AWAITING V-SIGN</div>
-    <video class="input_video"></video>
+    <button id="start-btn">ACTIVATE CAMERA</button>
+    <div id="info">System Offline</div>
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="overlay"></canvas>
 
     <script>
-        let isStarted = false;
-        const starCount = 3000;
+        const video = document.getElementById('webcam');
+        const info = document.getElementById('info');
+        const overlay = document.getElementById('overlay');
+        const ctx = overlay.getContext('2d');
+
+        // 1. Setup Three.js Stars
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer();
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const geometry = new THREE.BufferGeometry();
-        const pos = new Float32Array(starCount * 3);
+        const starCount = 3000;
+        const geo = new THREE.BufferGeometry();
+        const positions = new Float32Array(starCount * 3);
         const targets = new Float32Array(starCount * 3);
 
-        // Initial Random Cloud
-        for (let i = 0; i < starCount; i++) {
-            pos[i*3] = (Math.random()-0.5)*40;
-            pos[i*3+1] = (Math.random()-0.5)*40;
-            pos[i*3+2] = (Math.random()-0.5)*40;
-            targets[i*3] = pos[i*3];
-            targets[i*3+1] = pos[i*3+1];
-            targets[i*3+2] = pos[i*3+2];
+        for(let i=0; i<starCount*3; i++) {
+            positions[i] = (Math.random()-0.5)*50;
+            targets[i] = positions[i];
         }
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const stars = new THREE.Points(geo, new THREE.PointsMaterial({color: 0x00ffff, size: 0.1}));
+        scene.add(stars);
+        camera.position.z = 30;
 
-        geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-        const material = new THREE.PointsMaterial({ size: 0.1, color: 0x00ffff });
-        const points = new THREE.Points(geometry, material);
-        scene.add(points);
-        camera.position.z = 25;
+        // 2. Setup Hand Tracking
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        
+        hands.onResults((results) => {
+            // Clear debug overlay
+            ctx.clearRect(0,0, overlay.width, overlay.height);
 
-        // --- THE ONLY TWO SHAPES ---
-        function setCloud() {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // Draw a debug dot on the index finger
+                ctx.fillStyle = "red";
+                ctx.beginPath();
+                ctx.arc(landmarks[8].x * overlay.width, landmarks[8].y * overlay.height, 5, 0, Math.PI*2);
+                ctx.fill();
+
+                // Check for V-Sign (Index and Middle Up)
+                const isV = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y;
+                
+                if (isV) {
+                    info.innerText = "V-SIGN DETECTED: HAVE A GREAT DAY";
+                    for (let i = 0; i < starCount; i++) {
+                        targets[i*3] = ((i % 100) - 50) * 0.4; // Grid X
+                        targets[i*3+1] = (Math.floor(i / 100) % 5 - 2) * 2; // Grid Y
+                        targets[i*3+2] = 0;
+                    }
+                } else {
+                    info.innerText = "SHOW V-SIGN (✌️)";
+                    resetToCloud();
+                }
+            } else {
+                info.innerText = "NO HAND SEEN";
+                resetToCloud();
+            }
+        });
+
+        function resetToCloud() {
             for (let i = 0; i < starCount; i++) {
-                // Return to random spots
-                const seed = i * 1.5;
-                targets[i*3] = Math.sin(seed) * 15 + (Math.random()-0.5)*5;
-                targets[i*3+1] = Math.cos(seed) * 15 + (Math.random()-0.5)*5;
+                const a = i * 0.5;
+                targets[i*3] = Math.cos(a) * 15 + (Math.random()-0.5)*5;
+                targets[i*3+1] = Math.sin(a) * 15 + (Math.random()-0.5)*5;
                 targets[i*3+2] = (Math.random()-0.5)*10;
             }
         }
 
-        function setTextMessage() {
-            for (let i = 0; i < starCount; i++) {
-                // Arrange into 4 straight lines to look like text blocks
-                const line = i % 4;
-                targets[i*3] = ((i % 750) / 30 - 12) * 1.2; // Width
-                targets[i*3+1] = (1.5 - line) * 4; // Vertical spacing
-                targets[i*3+2] = 0;
-            }
-        }
-
-        // --- HANDS LOGIC ---
-        function onResults(results) {
-            const status = document.getElementById('status');
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const lm = results.multiHandLandmarks[0];
-                
-                // Detection: Index and Middle fingers UP, others DOWN
-                const indexUp = lm[8].y < lm[6].y;
-                const middleUp = lm[12].y < lm[10].y;
-                const ringDown = lm[16].y > lm[14].y;
-                const pinkyDown = lm[20].y > lm[18].y;
-
-                if (indexUp && middleUp && ringDown && pinkyDown) {
-                    status.innerText = "HAVE A GREAT DAY";
-                    setTextMessage();
-                } else {
-                    status.innerText = "AWAITING V-SIGN";
-                    setCloud();
-                }
-            } else {
-                status.innerText = "NO HAND DETECTED";
-                setCloud();
-            }
-        }
-
+        // 3. Animation & Camera Start
         function animate() {
             requestAnimationFrame(animate);
-            const p = geometry.attributes.position.array;
-            for (let i = 0; i < starCount * 3; i++) {
-                p[i] += (targets[i] - p[i]) * 0.1; // Smooth move
+            const posAttr = geo.attributes.position.array;
+            for(let i=0; i<starCount*3; i++) {
+                posAttr[i] += (targets[i] - posAttr[i]) * 0.1;
             }
-            geometry.attributes.position.needsUpdate = true;
-            points.rotation.y += 0.001;
+            geo.attributes.position.needsUpdate = true;
+            stars.rotation.y += 0.002;
             renderer.render(scene, camera);
         }
 
-        document.getElementById('start-btn').addEventListener('click', () => {
-            isStarted = true;
+        document.getElementById('start-btn').addEventListener('click', async () => {
             document.getElementById('start-btn').style.display = 'none';
+            const stream = await navigator.mediaDevices.getUserMedia({video: true});
+            video.srcObject = stream;
+            
             animate();
-            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-            hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.5 });
-            hands.onResults(onResults);
-            new Camera(document.querySelector('.input_video'), {
-                onFrame: async () => { await hands.send({image: document.querySelector('.input_video')}); },
-                width: 640, height: 480
-            }).start();
+            
+            // Start the detection loop
+            async function detectionLoop() {
+                await hands.send({image: video});
+                requestAnimationFrame(detectionLoop);
+            }
+            detectionLoop();
         });
     </script>
 </body>
