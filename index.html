@@ -2,167 +2,135 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nebula Control: Supernova Edition</title>
+    <title>Nebula Core: Warp & Flare</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
-        video { position: absolute; bottom: 15px; right: 15px; width: 140px; border: 1px solid #00ffff; border-radius: 8px; transform: scaleX(-1); opacity: 0.5; }
-        #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: #00ffff; pointer-events: none; }
-        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; background: #00ffff; border: none; cursor: pointer; font-weight: bold; border-radius: 5px; z-index: 10; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
+        video { position: absolute; bottom: 15px; right: 15px; width: 130px; border: 1px solid #ff4500; border-radius: 5px; transform: scaleX(-1); opacity: 0.4; }
+        #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: #ff4500; pointer-events: none; text-transform: uppercase; letter-spacing: 2px; }
+        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; background: #ff4500; border: none; cursor: pointer; color: white; font-weight: bold; z-index: 100; }
     </style>
 </head>
 <body>
-    <button id="start-btn">ENGAGE NEBULA CORE</button>
-    <div id="ui"><h1>NEBULA CORE</h1><p id="status">Waiting for link...</p></div>
+    <button id="start-btn">INITIALIZE CORE</button>
+    <div id="ui"><h1 id="mode-display">NEBULA IDLE</h1><p id="sub-status">Awaiting Input...</p></div>
     <video class="input_video"></video>
 
     <script>
-        // --- AUDIO ENGINE ---
-        let audioCtx, oscillator, gainNode;
+        // --- AUDIO ---
+        let audioCtx, osc, gain;
         function initAudio() {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            oscillator = audioCtx.createOscillator();
-            gainNode = audioCtx.createGain();
-            oscillator.type = 'sawtooth';
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-            oscillator.start();
+            osc = audioCtx.createOscillator();
+            gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            gain.gain.setValueAtTime(0, audioCtx.currentTime);
+            osc.start();
             document.getElementById('start-btn').style.display = 'none';
         }
         document.getElementById('start-btn').addEventListener('click', initAudio);
 
-        // --- THREE.JS SCENE ---
+        // --- THREE.JS ---
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        // We use preserveDrawingBuffer: true to create trails manually
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer.autoClearColor = false; // Essential for Warp Trails
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const starCount = 4000;
+        const starCount = 5000;
         const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(starCount * 3);
-        const velocities = new Float32Array(starCount * 3); // For Supernova explosion
-        const colors = new Float32Array(starCount * 3);
-        const targetV = new Float32Array(starCount * 3);
-
-        const cyan = new THREE.Color(0x00ffff);
-        const magenta = new THREE.Color(0xff00ff);
-        const white = new THREE.Color(0xffffff);
-
+        const pos = new Float32Array(starCount * 3);
+        const col = new Float32Array(starCount * 3);
+        
         for (let i = 0; i < starCount; i++) {
-            positions[i*3] = (Math.random() - 0.5) * 20;
-            positions[i*3+1] = (Math.random() - 0.5) * 20;
-            positions[i*3+2] = (Math.random() - 0.5) * 10;
-            
-            const side = Math.random() > 0.5 ? 1 : -1;
-            const progress = Math.random();
-            targetV[i*3] = side * (progress * 4);
-            targetV[i*3+1] = progress * 8 - 4;
-            targetV[i*3+2] = (Math.random() - 0.5) * 0.5;
+            pos[i*3] = (Math.random()-0.5)*40;
+            pos[i*3+1] = (Math.random()-0.5)*40;
+            pos[i*3+2] = (Math.random()-0.5)*40;
         }
 
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        const material = new THREE.PointsMaterial({ size: 0.05, vertexColors: true, transparent: true });
-        const points = new THREE.Points(geometry, material);
+        geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        const mat = new THREE.PointsMaterial({ size: 0.08, vertexColors: true, transparent: true, opacity: 0.8 });
+        const points = new THREE.Points(geometry, mat);
         scene.add(points);
-        camera.position.z = 15;
+        camera.position.z = 20;
 
-        // --- GESTURE TRACKING ---
-        let currentGesture = "none";
-        let lastGesture = "none";
+        // --- GESTURE LOGIC ---
+        let currentMode = "idle"; // "idle", "warp", "flare"
+        const cyan = new THREE.Color(0x00ffff), orange = new THREE.Color(0xff4500), red = new THREE.Color(0xff0000);
 
         function onResults(results) {
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const lm = results.multiHandLandmarks[0];
-                const isIndexUp = lm[8].y < lm[6].y;
-                const isMiddleUp = lm[12].y < lm[10].y;
-                const isRingUp = lm[16].y < lm[14].y;
-                const isPinkyUp = lm[20].y < lm[18].y;
+                const indexUp = lm[8].y < lm[6].y, middleUp = lm[12].y < lm[10].y, 
+                      ringUp = lm[16].y < lm[14].y, pinkyUp = lm[20].y < lm[18].y;
 
-                lastGesture = currentGesture;
-
-                if (isIndexUp && isMiddleUp && !isRingUp) {
-                    currentGesture = "v";
-                } else if (!isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp) {
-                    currentGesture = "fist";
-                } else if (isIndexUp && isMiddleUp && isRingUp && isPinkyUp) {
-                    currentGesture = "open";
-                    // TRIGGER SUPERNOVA: If transitioning from Fist to Open
-                    if (lastGesture === "fist") triggerSupernova();
-                } else {
-                    currentGesture = "none";
-                }
-                document.getElementById('status').innerText = currentGesture.toUpperCase();
+                if (indexUp && !middleUp && !ringUp && !pinkyUp) currentMode = "warp";
+                else if (indexUp && !middleUp && !ringUp && pinkyUp) currentMode = "flare";
+                else currentMode = "idle";
+                
+                document.getElementById('mode-display').innerText = currentMode === "idle" ? "NEBULA IDLE" : currentMode + " DRIVE";
             }
         }
 
-        function triggerSupernova() {
-            const pos = geometry.attributes.position.array;
-            for (let i = 0; i < starCount; i++) {
-                // Set explosion velocity based on position from center
-                velocities[i*3] = (pos[i*3]) * 0.5 + (Math.random() - 0.5);
-                velocities[i*3+1] = (pos[i*3+1]) * 0.5 + (Math.random() - 0.5);
-                velocities[i*3+2] = (pos[i*3+2]) * 0.5 + (Math.random() - 0.5);
-            }
-        }
-
-        // --- RENDER LOOP ---
+        // --- LOOP ---
         function animate() {
             requestAnimationFrame(animate);
-            const pos = geometry.attributes.position.array;
-            const col = geometry.attributes.color.array;
+            const p = geometry.attributes.position.array;
+            const c = geometry.attributes.color.array;
+
+            // Fade effect for trails
+            const fadeOverlay = new THREE.Mesh(
+                new THREE.PlaneGeometry(100, 100),
+                new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: currentMode === "warp" ? 0.15 : 0.4 })
+            );
+            fadeOverlay.position.z = camera.position.z - 1;
+            scene.add(fadeOverlay);
 
             if (audioCtx) {
-                let freq = 110, vol = 0.02;
-                if (currentGesture === "v") { freq = 440; vol = 0.1; }
-                if (currentGesture === "fist") { freq = 60; vol = 0.2; }
-                if (currentGesture === "open" && lastGesture === "fist") { freq = 880; vol = 0.4; } // Explosion sound
-                oscillator.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.1);
-                gainNode.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.1);
+                let f = 110, v = 0.02;
+                if (currentMode === "warp") { f = 660; v = 0.15; osc.type = 'sine'; }
+                else if (currentMode === "flare") { f = 55; v = 0.25; osc.type = 'sawtooth'; }
+                osc.frequency.setTargetAtTime(f, audioCtx.currentTime, 0.1);
+                gain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.1);
             }
 
             for (let i = 0; i < starCount; i++) {
-                let ix = i * 3, iy = i * 3 + 1, iz = i * 3 + 2;
+                let ix = i*3, iy = i*3+1, iz = i*3+2;
 
-                if (currentGesture === "v") {
-                    pos[ix] += (targetV[ix] - pos[ix]) * 0.1;
-                    pos[iy] += (targetV[iy] - pos[iy]) * 0.1;
-                    pos[iz] += (targetV[iz] - pos[iz]) * 0.1;
-                    col[ix] += (magenta.r - col[ix]) * 0.1;
-                    col[iy] += (magenta.g - col[iy]) * 0.1;
-                    col[iz] += (magenta.b - col[iz]) * 0.1;
-                } else if (currentGesture === "fist") {
-                    pos[ix] *= 0.8; pos[iy] *= 0.8; pos[iz] *= 0.8; // Suction
-                    col[ix] = 1; col[iy] = 1; col[iz] = 1; 
-                } else if (currentGesture === "open" && Math.abs(velocities[ix]) > 0.01) {
-                    // Explosion physics
-                    pos[ix] += velocities[ix];
-                    pos[iy] += velocities[iy];
-                    pos[iz] += velocities[iz];
-                    velocities[ix] *= 0.9; velocities[iy] *= 0.9; velocities[iz] *= 0.9; // Friction
-                    col[ix] = 1; col[iy] = 1; col[iz] = 1;
+                if (currentMode === "warp") {
+                    p[iz] += 1.5; // Fly toward camera
+                    if (p[iz] > 20) p[iz] = -40; // Loop back
+                    c[ix] = 1; c[iy] = 1; c[iz] = 1; // Warp White
+                } else if (currentMode === "flare") {
+                    // Jitter / Heat effect
+                    p[ix] += (Math.random()-0.5)*0.2;
+                    p[iy] += (Math.random()-0.5)*0.2;
+                    c[ix] = orange.r; c[iy] = orange.g; c[iz] = orange.b;
+                    if (Math.random() > 0.9) { c[ix] = red.r; c[iy] = red.g; c[iz] = red.b; }
                 } else {
-                    // Return to Idle Galaxy
-                    let x = pos[ix], y = pos[iy];
-                    pos[ix] = x * Math.cos(0.01) - y * Math.sin(0.01);
-                    pos[iy] = x * Math.sin(0.01) + y * Math.cos(0.01);
-                    col[ix] += (cyan.r - col[ix]) * 0.05;
-                    col[iy] += (cyan.g - col[iy]) * 0.05;
-                    col[iz] += (cyan.b - col[iz]) * 0.05;
+                    // Idle Drift
+                    p[iz] += 0.05;
+                    if (p[iz] > 20) p[iz] = -40;
+                    c[ix] += (cyan.r - c[ix]) * 0.1;
+                    c[iy] += (cyan.g - c[iy]) * 0.1;
+                    c[iz] += (cyan.b - c[iz]) * 0.1;
                 }
             }
             geometry.attributes.position.needsUpdate = true;
             geometry.attributes.color.needsUpdate = true;
             renderer.render(scene, camera);
+            scene.remove(fadeOverlay); // Clean up overlay
         }
         animate();
 
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.8, minTrackingConfidence: 0.8 });
+        hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.8 });
         hands.onResults(onResults);
         new Camera(document.querySelector('.input_video'), {
             onFrame: async () => { await hands.send({image: document.querySelector('.input_video')}); },
