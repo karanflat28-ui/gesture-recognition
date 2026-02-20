@@ -1,117 +1,155 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  
     <meta charset="UTF-8">
-    <title>Galaxy Gesture V</title>
+    <title>Nebula Control - V & Fist</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
-        canvas { display: block; }
-        video { position: absolute; bottom: 10px; right: 10px; width: 150px; border: 2px solid white; border-radius: 10px; transform: scaleX(-1); }
-        #info { position: absolute; top: 10px; width: 100%; text-align: center; color: white; pointer-events: none; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
+        video { position: absolute; bottom: 15px; right: 15px; width: 160px; border: 2px solid #00ffff; border-radius: 8px; transform: scaleX(-1); opacity: 0.7; }
+        #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: #00ffff; text-shadow: 0 0 10px #00ffff; pointer-events: none; }
+        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; background: #00ffff; border: none; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div id="info"><h1>Show ✌️ to Align the Stars</h1></div>
+    <button id="start-btn">INITIALIZE NEBULA (Enable Sound)</button>
+    <div id="ui"><h1>NEBULA CONTROL</h1><p id="status">Waiting for user...</p></div>
     <video class="input_video"></video>
 
     <script>
-        // --- 1. THREE.JS SCENE SETUP ---
+        // --- AUDIO SETUP ---
+        let audioCtx, oscillator, gainNode;
+        function initAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            oscillator = audioCtx.createOscillator();
+            gainNode = audioCtx.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(110, audioCtx.currentTime); 
+            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+            document.getElementById('start-btn').style.display = 'none';
+        }
+
+        document.getElementById('start-btn').addEventListener('click', initAudio);
+
+        // --- THREE.JS SETUP ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const starCount = 2500;
+        const starCount = 3000;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(starCount * 3);
-        const targetPositions = new Float32Array(starCount * 3);
-        const initialPositions = new Float32Array(starCount * 3);
+        const colors = new Float32Array(starCount * 3);
+        const targetV = new Float32Array(starCount * 3);
+
+        const cyan = new THREE.Color(0x00ffff);
+        const magenta = new THREE.Color(0xff00ff);
 
         for (let i = 0; i < starCount; i++) {
-            // Random Galaxy Distribution
-            let r = Math.random() * 5 + 2;
-            let theta = Math.random() * Math.PI * 2;
-            initialPositions[i * 3] = r * Math.cos(theta);
-            initialPositions[i * 3 + 1] = r * Math.sin(theta);
-            initialPositions[i * 3 + 2] = (Math.random() - 0.5) * 2;
-            
-            positions[i * 3] = initialPositions[i * 3];
-            positions[i * 3 + 1] = initialPositions[i * 3 + 1];
-            positions[i * 3 + 2] = initialPositions[i * 3 + 2];
+            positions[i*3] = (Math.random() - 0.5) * 15;
+            positions[i*3+1] = (Math.random() - 0.5) * 15;
+            positions[i*3+2] = (Math.random() - 0.5) * 10;
+
+            colors[i*3] = cyan.r; colors[i*3+1] = cyan.g; colors[i*3+2] = cyan.b;
+
+            const side = Math.random() > 0.5 ? 1 : -1;
+            const progress = Math.random();
+            targetV[i*3] = side * (progress * 3.5); 
+            targetV[i*3+1] = progress * 7 - 3.5;
+            targetV[i*3+2] = (Math.random() - 0.5) * 0.5;
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        const material = new THREE.PointsMaterial({ color: 0x00ffff, size: 0.05 });
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        const material = new THREE.PointsMaterial({ size: 0.06, vertexColors: true, transparent: true, opacity: 0.8 });
         const points = new THREE.Points(geometry, material);
         scene.add(points);
-        camera.position.z = 10;
+        camera.position.z = 12;
 
-        // --- 2. GESTURE LOGIC ---
-        let formingV = false;
-
-        function updateVTarget() {
-            for (let i = 0; i < starCount; i++) {
-                const side = Math.random() > 0.5 ? 1 : -1;
-                const progress = Math.random();
-                // Create a "V" shape using two diagonal lines
-                targetPositions[i * 3] = side * (progress * 3); // X
-                targetPositions[i * 3 + 1] = progress * 6 - 3; // Y
-                targetPositions[i * 3 + 2] = (Math.random() - 0.5) * 0.5; // Z
-            }
-        }
-        updateVTarget();
+        // --- GESTURE STATE ---
+        let currentGesture = "none"; // "v", "fist", or "none"
 
         function onResults(results) {
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
-                const isIndexUp = landmarks[8].y < landmarks[6].y;
-                const isMiddleUp = landmarks[12].y < landmarks[10].y;
-                const isRingDown = landmarks[16].y > landmarks[14].y;
-                formingV = (isIndexUp && isMiddleUp && isRingDown);
+                const lm = results.multiHandLandmarks[0];
+                const isIndexUp = lm[8].y < lm[6].y;
+                const isMiddleUp = lm[12].y < lm[10].y;
+                const isRingUp = lm[16].y < lm[14].y;
+                
+                if (isIndexUp && isMiddleUp && !isRingUp) {
+                    currentGesture = "v";
+                    document.getElementById('status').innerText = "STARS ALIGNED (V)";
+                } else if (!isIndexUp && !isMiddleUp && !isRingUp) {
+                    currentGesture = "fist";
+                    document.getElementById('status').innerText = "BLACK HOLE (FIST)";
+                } else {
+                    currentGesture = "none";
+                    document.getElementById('status').innerText = "IDLE GALAXY";
+                }
             } else {
-                formingV = false;
+                currentGesture = "none";
             }
         }
 
-        // --- 3. ANIMATION LOOP ---
+        // --- ANIMATION ---
         function animate() {
             requestAnimationFrame(animate);
-            const posAttr = geometry.attributes.position;
-            
+            const pos = geometry.attributes.position.array;
+            const col = geometry.attributes.color.array;
+
+            // Audio Logic
+            if (audioCtx) {
+                let targetFreq = 110;
+                let targetVol = 0.05;
+                if (currentGesture === "v") { targetFreq = 440; targetVol = 0.15; }
+                if (currentGesture === "fist") { targetFreq = 55; targetVol = 0.3; }
+                if (currentGesture === "none") { targetVol = 0.02; }
+                
+                oscillator.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.1);
+                gainNode.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.1);
+            }
+
             for (let i = 0; i < starCount; i++) {
                 let ix = i * 3, iy = i * 3 + 1, iz = i * 3 + 2;
 
-                if (formingV) {
-                    // Move toward V Shape
-                    posAttr.array[ix] += (targetPositions[ix] - posAttr.array[ix]) * 0.1;
-                    posAttr.array[iy] += (targetPositions[iy] - posAttr.array[iy]) * 0.1;
-                    posAttr.array[iz] += (targetPositions[iz] - posAttr.array[iz]) * 0.1;
+                if (currentGesture === "v") {
+                    // Move to V & turn Magenta
+                    pos[ix] += (targetV[ix] - pos[ix]) * 0.1;
+                    pos[iy] += (targetV[iy] - pos[iy]) * 0.1;
+                    pos[iz] += (targetV[iz] - pos[iz]) * 0.1;
+                    col[ix] += (magenta.r - col[ix]) * 0.1;
+                    col[iy] += (magenta.g - col[iy]) * 0.1;
+                    col[iz] += (magenta.b - col[iz]) * 0.1;
+                } else if (currentGesture === "fist") {
+                    // Sucked into Center
+                    pos[ix] *= 0.85; pos[iy] *= 0.85; pos[iz] *= 0.85;
+                    col[ix] = 1; col[iy] = 1; col[iz] = 1; // Turn White
                 } else {
-                    // Galaxy Rotation
-                    let x = posAttr.array[ix];
-                    let y = posAttr.array[iy];
-                    let angle = 0.02;
-                    posAttr.array[ix] = x * Math.cos(angle) - y * Math.sin(angle);
-                    posAttr.array[iy] = x * Math.sin(angle) + y * Math.cos(angle);
-                    // Drift back to initial z
-                    posAttr.array[iz] += (initialPositions[iz] - posAttr.array[iz]) * 0.05;
+                    // Rotate and return Cyan
+                    let x = pos[ix], y = pos[iy];
+                    pos[ix] = x * Math.cos(0.01) - y * Math.sin(0.01);
+                    pos[iy] = x * Math.sin(0.01) + y * Math.cos(0.01);
+                    col[ix] += (cyan.r - col[ix]) * 0.05;
+                    col[iy] += (cyan.g - col[iy]) * 0.05;
+                    col[iz] += (cyan.b - col[iz]) * 0.05;
                 }
             }
-            posAttr.needsUpdate = true;
-            points.rotation.z += 0.001;
+            geometry.attributes.position.needsUpdate = true;
+            geometry.attributes.color.needsUpdate = true;
             renderer.render(scene, camera);
         }
         animate();
 
-        // --- 4. CAMERA & MEDIAPIPE ---
         const videoElement = document.querySelector('.input_video');
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
         hands.onResults(onResults);
         const cam = new Camera(videoElement, { onFrame: async () => { await hands.send({image: videoElement}); }, width: 640, height: 480 });
         cam.start();
