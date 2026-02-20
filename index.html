@@ -1,296 +1,375 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Nebula: Perfect Text V-Sign</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nebula: V‑Sign Text Morph</title>
+    <!-- Three.js and MediaPipe Hands -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
-
     <style>
         body {
             margin: 0;
-            background: #000;
             overflow: hidden;
-            color: white;
+            background-color: black;
             font-family: 'Orbitron', sans-serif;
         }
-
+        #status {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: #0ff;
+            font-size: 1.8rem;
+            text-shadow: 0 0 20px cyan;
+            z-index: 20;
+            pointer-events: none;
+            mix-blend-mode: difference;
+        }
         #start-btn {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            padding: 20px 40px;
-            z-index: 10;
-            cursor: pointer;
-            background: #00ffff;
-            border: none;
-            border-radius: 50px;
+            padding: 18px 48px;
+            font-size: 1.5rem;
             font-weight: bold;
-            font-size: 18px;
-        }
-
-        #info {
-            position: absolute;
-            width: 100%;
-            text-align: center;
-            top: 20px;
-            font-size: 28px;
-            color: #00ffff;
-            text-shadow: 0 0 20px #00ffff;
+            background: transparent;
+            color: cyan;
+            border: 2px solid cyan;
+            border-radius: 60px;
+            cursor: pointer;
+            box-shadow: 0 0 20px cyan;
+            transition: 0.3s;
+            z-index: 30;
+            backdrop-filter: blur(4px);
             letter-spacing: 2px;
         }
-
-        video {
+        #start-btn:hover {
+            background: cyan;
+            color: black;
+            box-shadow: 0 0 40px cyan;
+        }
+        #webcam {
             position: absolute;
-            bottom: 10px;
-            left: 10px;
-            width: 160px;
+            bottom: 20px;
+            left: 20px;
+            width: 180px;
+            border-radius: 12px;
+            border: 2px solid rgba(0, 255, 255, 0.5);
             transform: scaleX(-1);
-            border: 1px solid #00ffff;
-            opacity: 0.4;
+            opacity: 0.3;
+            transition: opacity 0.3s;
+            z-index: 10;
+        }
+        #webcam:hover {
+            opacity: 0.9;
+        }
+        /* subtle scanline effect */
+        .scanline {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0,255,255,0.03) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 5;
         }
     </style>
 </head>
-
 <body>
+    <div id="status">🔮 SYSTEM AWAITING INPUT</div>
+    <button id="start-btn">ACTIVATE NEBULA</button>
+    <video id="webcam" autoplay playsinline></video>
+    <div class="scanline"></div>
 
-<button id="start-btn">ENGAGE NEBULA</button>
-<div id="info">SYSTEM OFFLINE</div>
-<video id="webcam" autoplay playsinline></video>
+    <script>
+        (function() {
+            // --- DOM elements ---
+            const video = document.getElementById('webcam');
+            const statusDiv = document.getElementById('status');
+            const startBtn = document.getElementById('start-btn');
 
-<script>
-const video = document.getElementById('webcam');
-const info = document.getElementById('info');
+            // --- Configuration ---
+            const PARTICLE_COUNT = 5000;           // more particles for crisp text
+            const TEXT_STRING = "NEBULA";           // ✨ the text to form
+            const TEXT_SIZE = 100;                   // big canvas size for detail
+            const SPREAD = 12;                        // how wide the text appears in 3D space
 
-
-// ============================
-// 1️⃣ TEXT BLUEPRINT (HIGH RES)
-// ============================
-
-const textCanvas = document.createElement('canvas');
-const tCtx = textCanvas.getContext('2d');
-
-textCanvas.width = 800;
-textCanvas.height = 200;
-
-function getTextPoints() {
-
-    tCtx.fillStyle = 'black';
-    tCtx.fillRect(0, 0, 800, 200);
-
-    tCtx.fillStyle = 'white';
-    tCtx.font = 'bold 90px Arial';
-    tCtx.textAlign = 'center';
-    tCtx.fillText("HAVE A GREAT DAY", 400, 120);
-
-    const points = [];
-    const imageData = tCtx.getImageData(0, 0, 800, 200).data;
-
-    for (let y = 0; y < 200; y += 1) {
-        for (let x = 0; x < 800; x += 1) {
-            if (imageData[(y * 800 + x) * 4] > 150) {
-                points.push({
-                    x: (x - 400) * 0.05,
-                    y: (100 - y) * 0.05
-                });
-            }
-        }
-    }
-
-    return points;
-}
-
-const textPoints = getTextPoints();
-
-
-// ============================
-// 2️⃣ THREE.JS SCENE
-// ============================
-
-const scene = new THREE.Scene();
-
-const camera = new THREE.PerspectiveCamera(
-    75,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1000
-);
-
-camera.position.z = 40;
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-
-
-// ============================
-// 3️⃣ PARTICLES
-// ============================
-
-const starCount = 5000;
-
-const geometry = new THREE.BufferGeometry();
-const positions = new Float32Array(starCount * 3);
-const targets = new Float32Array(starCount * 3);
-
-for (let i = 0; i < starCount * 3; i++) {
-    positions[i] = (Math.random() - 0.5) * 80;
-    targets[i] = positions[i];
-}
-
-geometry.setAttribute(
-    'position',
-    new THREE.BufferAttribute(positions, 3)
-);
-
-const material = new THREE.PointsMaterial({
-    color: 0x00ffff,
-    size: 0.25
-});
-
-const stars = new THREE.Points(geometry, material);
-scene.add(stars);
-
-
-// ============================
-// 4️⃣ CLOUD RESET FUNCTION
-// ============================
-
-function resetToCloud() {
-
-    for (let i = 0; i < starCount; i++) {
-
-        const angle = i * 0.15 + Date.now() * 0.001;
-
-        targets[i * 3]     = Math.cos(angle) * 15;
-        targets[i * 3 + 1] = Math.sin(angle) * 15;
-        targets[i * 3 + 2] = Math.sin(i) * 5;
-    }
-}
-
-
-// ============================
-// 5️⃣ HAND TRACKING
-// ============================
-
-const hands = new Hands({
-    locateFile: (file) =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`
-});
-
-hands.setOptions({
-    maxNumHands: 1,
-    minDetectionConfidence: 0.7,
-    minTrackingConfidence: 0.6
-});
-
-hands.onResults((results) => {
-
-    if (results.multiHandLandmarks &&
-        results.multiHandLandmarks.length > 0) {
-
-        const lm = results.multiHandLandmarks[0];
-
-        const isV =
-            lm[8].y < lm[6].y &&      // index up
-            lm[12].y < lm[10].y &&    // middle up
-            lm[16].y > lm[14].y &&    // ring down
-            lm[20].y > lm[18].y;      // pinky down
-
-        if (isV) {
-
-            info.innerText = "HAVE A GREAT DAY";
-
-            for (let i = 0; i < starCount; i++) {
-
-                const index =
-                    Math.floor(i / starCount * textPoints.length);
-
-                const pt = textPoints[index];
-
-                targets[i * 3]     = pt.x * 2;
-                targets[i * 3 + 1] = pt.y * 2;
-                targets[i * 3 + 2] = 0;  // flat text
+            // --- 1. Generate precise text points from canvas (white pixels) ---
+            function generateTextPoints() {
+                // Create an offscreen canvas
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 600;
+                canvas.height = 200;
+                
+                // Draw black background
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw white text (centered)
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${TEXT_SIZE}px 'Arial', 'Orbitron', sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(TEXT_STRING, canvas.width/2, canvas.height/2);
+                
+                // Collect all white pixels (threshold > 128)
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                const points = [];
+                
+                // Sample every pixel (no stride) for maximum detail, then we'll pick randomly later
+                for (let y = 0; y < canvas.height; y++) {
+                    for (let x = 0; x < canvas.width; x++) {
+                        const index = (y * canvas.width + x) * 4;
+                        // if pixel is bright (white)
+                        if (data[index] > 128) {
+                            // Normalize coordinates: center (0,0) and scale to fit in SPREAD range
+                            const nx = (x - canvas.width/2) / (canvas.width/2) * SPREAD;
+                            const ny = (canvas.height/2 - y) / (canvas.height/2) * SPREAD * 0.5; // y is inverted canvas, and we want less height
+                            points.push({ x: nx, y: ny });
+                        }
+                    }
+                }
+                
+                console.log(`Collected ${points.length} text pixels.`);
+                if (points.length === 0) {
+                    // fallback simple pattern if text rendering fails
+                    for (let i = 0; i < 200; i++) {
+                        points.push({ x: (Math.random()-0.5)*10, y: (Math.random()-0.5)*5 });
+                    }
+                }
+                return points;
             }
 
-        } else {
+            const textPoints = generateTextPoints(); // array of {x, y}
+            const textPointCount = textPoints.length;
 
-            info.innerText = "SHOW V-SIGN ✌";
-            resetToCloud();
-        }
+            // --- 2. Setup Three.js scene with particles (stars) ---
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050510);
+            
+            const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 22);
+            
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
 
-    } else {
+            // Geometry with positions
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(PARTICLE_COUNT * 3);
+            const targets = new Float32Array(PARTICLE_COUNT * 3); // target positions for morphing
 
-        info.innerText = "SEARCHING FOR HAND...";
-        resetToCloud();
-    }
-});
+            // Initialize stars in a random cloud (nebula)
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                // random sphere
+                const r = 15 * Math.cbrt(Math.random()); // uniform in sphere
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                positions[i*3] = r * Math.sin(phi) * Math.cos(theta);
+                positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+                positions[i*3+2] = r * Math.cos(phi);
+                
+                // initial targets same as positions (cloud)
+                targets[i*3] = positions[i*3];
+                targets[i*3+1] = positions[i*3+1];
+                targets[i*3+2] = positions[i*3+2];
+            }
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
+            // Custom shader material with slight glow and color variation
+            const particleMaterial = new THREE.PointsMaterial({
+                color: 0x88ddff,
+                size: 0.18,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                map: createParticleTexture() // small dot with gradient
+            });
 
-// ============================
-// 6️⃣ ANIMATION LOOP
-// ============================
+            const stars = new THREE.Points(geometry, particleMaterial);
+            scene.add(stars);
 
-function animate() {
+            // Helper to generate a soft circle texture for points
+            function createParticleTexture() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 16;
+                canvas.height = 16;
+                const ctx = canvas.getContext('2d');
+                const gradient = ctx.createRadialGradient(8, 8, 0, 8, 8, 8);
+                gradient.addColorStop(0, 'rgba(255,255,255,1)');
+                gradient.addColorStop(0.5, 'rgba(100,255,255,0.8)');
+                gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 16, 16);
+                const texture = new THREE.CanvasTexture(canvas);
+                return texture;
+            }
 
-    requestAnimationFrame(animate);
+            // Add a few faint background stars for depth (extra)
+            const bgGeo = new THREE.BufferGeometry();
+            const bgPos = new Float32Array(2000 * 3);
+            for (let i=0; i<2000; i++) {
+                bgPos[i*3] = (Math.random()-0.5)*80;
+                bgPos[i*3+1] = (Math.random()-0.5)*80;
+                bgPos[i*3+2] = (Math.random()-0.5)*80 - 30; // far away
+            }
+            bgGeo.setAttribute('position', new THREE.BufferAttribute(bgPos, 3));
+            const bgStars = new THREE.Points(bgGeo, new THREE.PointsMaterial({color: 0x446688, size: 0.3, blending: THREE.AdditiveBlending}));
+            scene.add(bgStars);
 
-    const pos = geometry.attributes.position.array;
+            // --- 3. Hand tracking setup (MediaPipe) ---
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`
+            });
+            
+            hands.setOptions({
+                maxNumHands: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
 
-    for (let i = 0; i < starCount * 3; i++) {
-        pos[i] += (targets[i] - pos[i]) * 0.08;
-    }
+            hands.onResults((results) => {
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const landmarks = results.multiHandLandmarks[0];
+                    
+                    // --- Robust V-sign detection ---
+                    // Indices: 4=thumb tip, 8=index tip, 12=middle tip, 16=ring tip, 20=pinky tip
+                    // PIP joints: 6(index), 10(middle), 14(ring), 18(pinky)
+                    const indexTip = landmarks[8];
+                    const indexPip = landmarks[6];
+                    const middleTip = landmarks[12];
+                    const middlePip = landmarks[10];
+                    const ringTip = landmarks[16];
+                    const ringPip = landmarks[14];
+                    const pinkyTip = landmarks[20];
+                    const pinkyPip = landmarks[18];
+                    
+                    // Condition: index and middle extended (tip above pip), ring and pinky curled (tip below pip)
+                    // Also ensure index and middle are spread apart (distance between tips > distance between pips)
+                    const indexExtended = indexTip.y < indexPip.y;
+                    const middleExtended = middleTip.y < middlePip.y;
+                    const ringCurled = ringTip.y > ringPip.y;
+                    const pinkyCurled = pinkyTip.y > pinkyPip.y;
+                    
+                    // Spread: distance between index and middle tips should be larger than between their pips (approx)
+                    const tipDist = Math.hypot(indexTip.x - middleTip.x, indexTip.y - middleTip.y);
+                    const pipDist = Math.hypot(indexPip.x - middlePip.x, indexPip.y - middlePip.y);
+                    const spreadCondition = tipDist > pipDist * 1.2; // heuristic
+                    
+                    const isV = indexExtended && middleExtended && ringCurled && pinkyCurled && spreadCondition;
+                    
+                    if (isV) {
+                        statusDiv.innerText = '✧ V-SIGN DETECTED ✧';
+                        statusDiv.style.color = '#ff66ff';
+                        statusDiv.style.textShadow = '0 0 20px magenta';
+                        
+                        // Map each particle to a random text point (so the shape is uniformly filled)
+                        for (let i = 0; i < PARTICLE_COUNT; i++) {
+                            // pick a random text point (allowing repeats, which is fine because we have many particles)
+                            const pt = textPoints[Math.floor(Math.random() * textPointCount)];
+                            // add small random Z variation to give depth
+                            const zOffset = (Math.random() - 0.5) * 3;
+                            targets[i*3] = pt.x;
+                            targets[i*3+1] = pt.y;
+                            targets[i*3+2] = zOffset;
+                        }
+                    } else {
+                        statusDiv.innerText = '✌️ SHOW V-SIGN (index & middle up)';
+                        statusDiv.style.color = '#0ff';
+                        statusDiv.style.textShadow = '0 0 15px cyan';
+                        resetToNebula();
+                    }
+                } else {
+                    statusDiv.innerText = '👋 NO HAND DETECTED';
+                    statusDiv.style.color = '#0ff';
+                    statusDiv.style.textShadow = '0 0 15px cyan';
+                    resetToNebula();
+                }
+            });
 
-    geometry.attributes.position.needsUpdate = true;
+            // Reset targets to a swirling nebula cloud
+            function resetToNebula() {
+                const time = performance.now() * 0.001;
+                for (let i = 0; i < PARTICLE_COUNT; i++) {
+                    // organic, slowly changing cloud
+                    const angle = i * 2.5 + time * 0.2;
+                    const radius = 8 + Math.sin(i * 0.7 + time) * 5;
+                    targets[i*3] = Math.cos(angle) * radius;
+                    targets[i*3+1] = Math.sin(angle * 1.3) * radius * 0.7;
+                    targets[i*3+2] = Math.sin(i * 0.5 + time * 0.5) * 6;
+                }
+            }
+            // initial cloud
+            resetToNebula();
 
-    stars.rotation.y += 0.001;
+            // --- 4. Animation loop (morph particles towards targets) ---
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                // Smooth interpolation (lerp) positions towards targets
+                const posAttr = geometry.attributes.position.array;
+                for (let i = 0; i < PARTICLE_COUNT * 3; i++) {
+                    posAttr[i] += (targets[i] - posAttr[i]) * 0.06; // gentle speed
+                }
+                geometry.attributes.position.needsUpdate = true;
+                
+                // Rotate background stars slowly
+                bgStars.rotation.y += 0.0001;
+                
+                renderer.render(scene, camera);
+            }
+            animate();
 
-    renderer.render(scene, camera);
-}
+            // --- 5. Webcam start and detection loop ---
+            startBtn.addEventListener('click', async () => {
+                startBtn.style.display = 'none';
+                statusDiv.innerText = '📡 ACCESSING CAMERA...';
+                
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { 
+                            width: { ideal: 640 },
+                            height: { ideal: 480 },
+                            facingMode: 'user' 
+                        } 
+                    });
+                    video.srcObject = stream;
+                    await video.play();
+                    
+                    // Detection loop
+                    async function detect() {
+                        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                            await hands.send({ image: video });
+                        }
+                        requestAnimationFrame(detect);
+                    }
+                    detect();
+                    
+                    statusDiv.innerText = '⏳ DETECTING... SHOW V-SIGN';
+                } catch (err) {
+                    statusDiv.innerText = '❌ CAMERA ACCESS DENIED';
+                    console.error(err);
+                }
+            });
 
+            // --- 6. Window resize handler ---
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
 
-// ============================
-// 7️⃣ START BUTTON
-// ============================
+            // --- 7. Optional: subtle auto-rotate of the main stars when idle? No, we'll control via targets.
+            // but we can add a little rotation to the nebula cloud? Not needed.
 
-document.getElementById('start-btn')
-.addEventListener('click', async () => {
-
-    document.getElementById('start-btn').style.display = 'none';
-
-    const stream =
-        await navigator.mediaDevices.getUserMedia({ video: true });
-
-    video.srcObject = stream;
-
-    animate();
-
-    async function detectionLoop() {
-        await hands.send({ image: video });
-        requestAnimationFrame(detectionLoop);
-    }
-
-    detectionLoop();
-});
-
-
-// ============================
-// 8️⃣ RESPONSIVE
-// ============================
-
-window.addEventListener('resize', () => {
-
-    camera.aspect =
-        window.innerWidth / window.innerHeight;
-
-    camera.updateProjectionMatrix();
-
-    renderer.setSize(
-        window.innerWidth,
-        window.innerHeight
-    );
-});
-</script>
-
+        })();
+    </script>
 </body>
 </html>
