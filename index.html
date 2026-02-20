@@ -1,52 +1,50 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Nebula: Perfect Text V-Sign</title>
+    <title>Nebula: Mobile Compact</title>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; color: white; font-family: sans-serif; }
-        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; z-index: 100; cursor: pointer; background: #00ffff; border: none; border-radius: 50px; font-weight: bold; color: black; box-shadow: 0 0 20px #00ffff; }
-        #info { position: absolute; width: 100%; text-align: center; top: 20px; font-size: 24px; color: #00ffff; z-index: 10; }
-        video { position: absolute; bottom: 10px; left: 10px; width: 160px; transform: scaleX(-1); border: 1px solid #00ffff; opacity: 0.3; pointer-events: none; }
+        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; z-index: 100; cursor: pointer; background: #00ffff; border: none; border-radius: 50px; font-weight: bold; color: black; }
+        #info { position: absolute; width: 100%; text-align: center; top: 20px; font-size: 18px; color: #00ffff; z-index: 10; padding: 0 10px; }
+        video { position: absolute; bottom: 10px; left: 10px; width: 100px; transform: scaleX(-1); border: 1px solid #00ffff; opacity: 0.3; pointer-events: none; }
     </style>
 </head>
 <body>
-    <button id="start-btn">ENGAGE NEBULA</button>
-    <div id="info">SYSTEM OFFLINE</div>
+    <button id="start-btn">START NEBULA</button>
+    <div id="info">SYSTEM READY</div>
     <video id="webcam" autoplay playsinline></video>
 
     <script>
         const video = document.getElementById('webcam');
         const info = document.getElementById('info');
         
-        // --- 1. TEXT GENERATOR ---
+        // --- 1. COMPACT TEXT GENERATOR ---
         const textCanvas = document.createElement('canvas');
         const tCtx = textCanvas.getContext('2d');
-        textCanvas.width = 400;
-        textCanvas.height = 100;
+        textCanvas.width = 300; // Smaller canvas
+        textCanvas.height = 150;
 
-        // --- MOBILE-OPTIMIZED TEXT GENERATOR ---
         function generateTextMap() {
             tCtx.fillStyle = 'black';
-            tCtx.fillRect(0, 0, 400, 100);
+            tCtx.fillRect(0, 0, 300, 150);
             tCtx.fillStyle = 'white';
-            
-            // Adjust font size for mobile stacking
-            tCtx.font = 'bold 30px Arial'; 
+            tCtx.font = 'bold 28px Arial'; // Smaller font
             tCtx.textAlign = 'center';
             
-            // Stack words vertically for narrow screens
-            tCtx.fillText("HAVE A", 200, 30);
-            tCtx.fillText("GREAT DAY", 200, 70);
+            // Stacking words to fit narrow mobile widths
+            tCtx.fillText("HAVE A", 150, 50);
+            tCtx.fillText("GREAT", 150, 85);
+            tCtx.fillText("DAY", 150, 120);
             
             const pts = [];
-            const data = tCtx.getImageData(0, 0, 400, 100).data;
-            for (let y = 0; y < 100; y += 2) {
-                for (let x = 0; x < 400; x += 2) {
-                    if (data[(y * 400 + x) * 4] > 128) {
-                        // Shrink the scale (0.1 instead of 0.15) to fit mobile
-                        pts.push({x: (x - 200) * 0.1, y: (50 - y) * 0.1});
+            const data = tCtx.getImageData(0, 0, 300, 150).data;
+            for (let y = 0; y < 150; y += 2) {
+                for (let x = 0; x < 300; x += 2) {
+                    if (data[(y * 300 + x) * 4] > 128) {
+                        // Very tight coordinate mapping
+                        pts.push({x: (x - 150) * 0.08, y: (75 - y) * 0.08});
                     }
                 }
             }
@@ -61,19 +59,19 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const starCount = 4000;
+        const starCount = 3500;
         const geo = new THREE.BufferGeometry();
         const posArr = new Float32Array(starCount * 3);
         const targetArr = new Float32Array(starCount * 3);
 
         for(let i=0; i<starCount*3; i++) {
-            posArr[i] = (Math.random()-0.5)*50;
+            posArr[i] = (Math.random()-0.5)*40;
             targetArr[i] = posArr[i];
         }
         geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-        const stars = new THREE.Points(geo, new THREE.PointsMaterial({color: 0x00ffff, size: 0.12}));
+        const stars = new THREE.Points(geo, new THREE.PointsMaterial({color: 0x00ffff, size: 0.1}));
         scene.add(stars);
-        camera.position.z = 25;
+        camera.position.z = 20;
 
         // --- 3. HAND TRACKING ---
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`});
@@ -86,29 +84,30 @@
                 
                 if (isV) {
                     info.innerText = "HAVE A GREAT DAY";
-            for (let i = 0; i < starCount; i++) {
-                const p = textPoints[i % textPoints.length];
-                // Increase multiplier slightly for visibility, but keep it centered
-                targetArr[i*3] = p.x * 2.8; 
-                targetArr[i*3+1] = p.y * 2.8;
-                targetArr[i*3+2] = 0;
-            }
+                    for (let i = 0; i < starCount; i++) {
+                        const p = textPoints[i % textPoints.length];
+                        // Small multiplier (2.0) ensures it stays centered on mobile
+                        targetArr[i*3] = p.x * 2.0;
+                        targetArr[i*3+1] = p.y * 2.0;
+                        targetArr[i*3+2] = 0;
+                    }
                 } else {
-                    info.innerText = "SIGHTED: SHOW V-SIGN (✌️)";
+                    info.innerText = "SHOW ✌️ SIGN";
                     returnToCloud();
                 }
             } else {
-                info.innerText = "SEARCHING FOR HAND...";
+                info.innerText = "SEARCHING...";
                 returnToCloud();
             }
         });
 
         function returnToCloud() {
+            const time = Date.now() * 0.0005;
             for (let i = 0; i < starCount; i++) {
-                const a = i * 0.2 + (Date.now() * 0.0005);
-                targetArr[i*3] = Math.cos(a) * 15;
-                targetArr[i*3+1] = Math.sin(a) * 15;
-                targetArr[i*3+2] = Math.sin(i) * 5;
+                const a = i * 0.2 + time;
+                targetArr[i*3] = Math.cos(a) * 10;
+                targetArr[i*3+1] = Math.sin(a) * 10;
+                targetArr[i*3+2] = Math.sin(i + time) * 3;
             }
         }
 
@@ -123,29 +122,19 @@
             renderer.render(scene, camera);
         }
 
-        // --- 4. STARTUP WITH ERROR HANDLING ---
         document.getElementById('start-btn').addEventListener('click', async () => {
             document.getElementById('start-btn').style.display = 'none';
-            info.innerText = "STARTING CAMERA...";
-
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user" } 
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
                 video.srcObject = stream;
                 animate();
-                
                 async function detectionLoop() {
-                    if (video.readyState >= 2) {
-                        await hands.send({image: video});
-                    }
+                    if (video.readyState >= 2) await hands.send({image: video});
                     requestAnimationFrame(detectionLoop);
                 }
                 detectionLoop();
             } catch (err) {
-                console.error(err);
-                info.innerText = "CAMERA ERROR: " + err.name;
-                alert("Please ensure your camera is plugged in and permissions are granted!");
+                info.innerText = "CAMERA ERROR";
             }
         });
     </script>
