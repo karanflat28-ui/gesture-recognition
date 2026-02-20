@@ -1,58 +1,26 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Nebula: Mobile Compact</title>
+    <title>Nebula: Star Wave</title>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; color: white; font-family: sans-serif; }
         #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; z-index: 100; cursor: pointer; background: #00ffff; border: none; border-radius: 50px; font-weight: bold; color: black; }
-        #info { position: absolute; width: 100%; text-align: center; top: 20px; font-size: 18px; color: #00ffff; z-index: 10; padding: 0 10px; }
-        video { position: absolute; bottom: 10px; left: 10px; width: 100px; transform: scaleX(-1); border: 1px solid #00ffff; opacity: 0.3; pointer-events: none; }
+        #info { position: absolute; width: 100%; text-align: center; top: 20px; font-size: 18px; color: #00ffff; z-index: 10; }
+        video { position: absolute; bottom: 10px; left: 10px; width: 100px; transform: scaleX(-1); border: 1px solid #00ffff; opacity: 0.2; pointer-events: none; }
     </style>
 </head>
 <body>
-    <button id="start-btn">START NEBULA</button>
-    <div id="info">SYSTEM READY</div>
+    <button id="start-btn">ENGAGE MIRROR</button>
+    <div id="info">WAVE TO CONTROL STARS</div>
     <video id="webcam" autoplay playsinline></video>
 
     <script>
         const video = document.getElementById('webcam');
         const info = document.getElementById('info');
         
-        // --- 1. COMPACT TEXT GENERATOR ---
-        const textCanvas = document.createElement('canvas');
-        const tCtx = textCanvas.getContext('2d');
-        textCanvas.width = 300; // Smaller canvas
-        textCanvas.height = 150;
-
-        function generateTextMap() {
-            tCtx.fillStyle = 'black';
-            tCtx.fillRect(0, 0, 300, 150);
-            tCtx.fillStyle = 'white';
-            tCtx.font = 'bold 28px Arial'; // Smaller font
-            tCtx.textAlign = 'center';
-            
-            // Stacking words to fit narrow mobile widths
-            tCtx.fillText("HAD", 150, 50);
-            tCtx.fillText("LUNCH", 150, 85);
-            tCtx.fillText("?", 150, 120);
-            
-            const pts = [];
-            const data = tCtx.getImageData(0, 0, 300, 150).data;
-            for (let y = 0; y < 150; y += 2) {
-                for (let x = 0; x < 300; x += 2) {
-                    if (data[(y * 300 + x) * 4] > 128) {
-                        // Very tight coordinate mapping
-                        pts.push({x: (x - 150) * 0.08, y: (75 - y) * 0.08});
-                    }
-                }
-            }
-            return pts;
-        }
-        const textPoints = generateTextMap();
-
-        // --- 2. THREE.JS SETUP ---
+        // --- 1. THREE.JS SETUP ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -69,34 +37,35 @@
             targetArr[i] = posArr[i];
         }
         geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-        const stars = new THREE.Points(geo, new THREE.PointsMaterial({color: 0x00ffff, size: 0.1}));
+        const stars = new THREE.Points(geo, new THREE.PointsMaterial({color: 0x00ffff, size: 0.15, transparent: true, opacity: 0.8}));
         scene.add(stars);
-        camera.position.z = 20;
+        camera.position.z = 25;
 
-        // --- 3. HAND TRACKING ---
+        // --- 2. HAND TRACKING ---
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`});
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
         
         hands.onResults((results) => {
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const lm = results.multiHandLandmarks[0];
-                const isV = lm[8].y < lm[6].y && lm[12].y < lm[10].y;
                 
-                if (isV) {
-                    info.innerText = "HAD LUNCH ?";
-                    for (let i = 0; i < starCount; i++) {
-                        const p = textPoints[i % textPoints.length];
-                        // Small multiplier (2.0) ensures it stays centered on mobile
-                        targetArr[i*3] = p.x * 2.0;
-                        targetArr[i*3+1] = p.y * 2.0;
-                        targetArr[i*3+2] = 0;
-                    }
-                } else {
-                    info.innerText = "SHOW ✌️ SIGN";
-                    returnToCloud();
+                // Map stars to the 21 hand points
+                for (let i = 0; i < starCount; i++) {
+                    // Pick one of the 21 hand joints for this star to follow
+                    const jointIndex = i % 21;
+                    const joint = lm[jointIndex];
+                    
+                    // Convert MediaPipe (0 to 1) to Three.js (-15 to 15)
+                    // We flip X because the video is mirrored
+                    targetArr[i*3] = (0.5 - joint.x) * 35; 
+                    targetArr[i*3+1] = (0.5 - joint.y) * 35;
+                    
+                    // Add a little "fuzziness" so it looks like a glowing cloud hand
+                    targetArr[i*3] += (Math.random() - 0.5) * 2;
+                    targetArr[i*3+1] += (Math.random() - 0.5) * 2;
+                    targetArr[i*3+2] = (Math.random() - 0.5) * 2;
                 }
             } else {
-                info.innerText = "SEARCHING...";
                 returnToCloud();
             }
         });
@@ -105,9 +74,9 @@
             const time = Date.now() * 0.0005;
             for (let i = 0; i < starCount; i++) {
                 const a = i * 0.2 + time;
-                targetArr[i*3] = Math.cos(a) * 10;
-                targetArr[i*3+1] = Math.sin(a) * 10;
-                targetArr[i*3+2] = Math.sin(i + time) * 3;
+                targetArr[i*3] = Math.cos(a) * 12;
+                targetArr[i*3+1] = Math.sin(a) * 12;
+                targetArr[i*3+2] = Math.sin(i + time) * 5;
             }
         }
 
@@ -115,10 +84,10 @@
             requestAnimationFrame(animate);
             const positions = geo.attributes.position.array;
             for(let i=0; i<starCount*3; i++) {
-                positions[i] += (targetArr[i] - positions[i]) * 0.1;
+                // Smooth follow: stars "chase" your hand joints
+                positions[i] += (targetArr[i] - positions[i]) * 0.15;
             }
             geo.attributes.position.needsUpdate = true;
-            stars.rotation.y += 0.001;
             renderer.render(scene, camera);
         }
 
