@@ -103,29 +103,36 @@
         }
 
         // --- GESTURE PROCESSING ---
-        function onResults(results) {
-            if (!isStarted) return;
-            const status = document.getElementById('status');
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const lm = results.multiHandLandmarks[0];
-                const index = lm[8].y < lm[6].y;
-                const middle = lm[12].y < lm[10].y;
-                const ring = lm[16].y < lm[14].y;
-                const pinky = lm[20].y < lm[18].y;
+function onResults(results) {
+    if (!isStarted) return;
+    const status = document.getElementById('status');
+    
+    // Check if a hand is actually in the frame
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const lm = results.multiHandLandmarks[0];
+        const index = lm[8].y < lm[6].y;
+        const middle = lm[12].y < lm[10].y;
+        const ring = lm[16].y < lm[14].y;
+        const pinky = lm[20].y < lm[18].y;
 
-                if (index && middle && !ring && !pinky) {
-                    status.innerText = "HAVE A GREAT DAY!"; setMessageShape();
-                } else if (index && !middle && !ring && pinky) {
-                    status.innerText = "PUPPY MODE"; setPuppyShape();
-                } else if (!index && !middle && !ring && !pinky) {
-                    status.innerText = "SINGULARITY"; setFistShape();
-                } else if (index && middle && ring && pinky) {
-                    status.innerText = "SUPERNOVA EXPLOSION!"; setGalaxyShape();
-                } else {
-                    status.innerText = "GALAXY IDLE"; setGalaxyShape();
-                }
-            }
+        if (index && middle && !ring && !pinky) {
+            status.innerText = "HAVE A GREAT DAY!"; setMessageShape();
+        } else if (index && !middle && !ring && pinky) {
+            status.innerText = "PUPPY MODE"; setPuppyShape();
+        } else if (!index && !middle && !ring && !pinky) {
+            status.innerText = "SINGULARITY"; setFistShape();
+        } else if (index && middle && ring && pinky) {
+            // This is the "Open Hand" trigger
+            status.innerText = "SUPERNOVA EXPLOSION!"; setGalaxyShape();
+        } else {
+            status.innerText = "GALAXY IDLE"; setGalaxyShape();
         }
+    } else {
+        // Even if NO hand is seen, keep the galaxy shape as the default
+        if (status.innerText === "OFFLINE") status.innerText = "GALAXY IDLE";
+        setGalaxyShape();
+    }
+}
 
         // --- ANIMATION ---
         function animate() {
@@ -154,19 +161,29 @@
             renderer.render(scene, camera);
         }
 
-        // --- STARTUP ---
-        document.getElementById('start-btn').addEventListener('click', () => {
-            isStarted = true;
-            document.getElementById('start-btn').style.display = 'none';
-            animate();
-            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-            hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.7 });
-            hands.onResults(onResults);
-            new Camera(document.querySelector('.input_video'), {
-                onFrame: async () => { await hands.send({image: document.querySelector('.input_video')}); },
-                width: 640, height: 480
-            }).start();
-        });
+        // --- UPDATED STARTUP ---
+document.getElementById('start-btn').addEventListener('click', () => {
+    isStarted = true;
+    document.getElementById('start-btn').style.display = 'none';
+    
+    // 1. Set the initial "Galaxy" targets IMMEDIATELY
+    setGalaxyShape(); 
+    document.getElementById('status').innerText = "GALAXY IDLE";
+    
+    // 2. Start the animation loop
+    animate();
+    
+    // 3. Start MediaPipe
+    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.7 });
+    hands.onResults(onResults);
+    
+    const cameraHelper = new Camera(document.querySelector('.input_video'), {
+        onFrame: async () => { await hands.send({image: document.querySelector('.input_video')}); },
+        width: 640, height: 480
+    });
+    cameraHelper.start();
+});
     </script>
 </body>
 </html>
